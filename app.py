@@ -2,6 +2,7 @@ from flask import Flask
 import requests
 import yfinance as yf
 import pandas as pd
+import os
 
 app = Flask(__name__)
 
@@ -29,22 +30,23 @@ def scan_stock(ticker):
     prev_close = data["Close"].iloc[-2]
     prev_ma20 = data["MA20"].iloc[-2]
 
-    # Điều kiện: giá cắt lên MA20
     if prev_close < prev_ma20 and last_close > last_ma20:
         message = f"🚀 {ticker}\nGiá: {round(last_close,2)}\nTín hiệu: Cắt lên MA20"
         send_telegram(message)
 
+@app.route("/")
+def home():
+    return "Bot is running"
+
 @app.route("/scan")
 def run_scan():
-    watchlist = ["HPG.HM", "VCB.HM", "FPT.HM", "MWG.HM", "BSR.HM", "PVD.HN", "PVS.HN", "PLX.HM"]
+    watchlist = ["HPG.HM", "VCB.HM", "FPT.HM", "MWG.HM"]
 
     for stock in watchlist:
         scan_stock(stock)
 
     return "Scan complete"
 
-@app.route("/")
-def home():
-    return "Bot is running"
-
-
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

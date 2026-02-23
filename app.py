@@ -40,6 +40,7 @@ def home():
 
 @app.route("/scan")
 def run_scan():
+    send_telegram("🔥 TEST SCAN OK")
     watchlist = ["HPG.HM", "VCB.HM", "FPT.HM", "MWG.HM"]
 
     for stock in watchlist:
@@ -50,3 +51,4 @@ def run_scan():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+

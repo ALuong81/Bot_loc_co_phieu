@@ -1,31 +1,50 @@
-from flask import Flask, request
+from flask import Flask
 import requests
+import yfinance as yf
+import pandas as pd
+
+app = Flask(__name__)
 
 BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
 
-app = Flask(__name__)
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
-
-    msg = f"""
-📊 {data.get('ticker')}
-💰 Giá: {data.get('price')}
-⏱ {data.get('timeframe')}
-📝 {data.get('note')}
-"""
-
+def send_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, json={
+    payload = {
         "chat_id": CHAT_ID,
-        "text": msg
-    })
+        "text": message
+    }
+    requests.post(url, json=payload)
 
-    return {"ok": True}
+def scan_stock(ticker):
+    data = yf.download(ticker, period="5d", interval="1h")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    if len(data) < 50:
+        return
+
+    data["MA20"] = data["Close"].rolling(20).mean()
+
+    last_close = data["Close"].iloc[-1]
+    last_ma20 = data["MA20"].iloc[-1]
+    prev_close = data["Close"].iloc[-2]
+    prev_ma20 = data["MA20"].iloc[-2]
+
+    # Điều kiện: giá cắt lên MA20
+    if prev_close < prev_ma20 and last_close > last_ma20:
+        message = f"🚀 {ticker}\nGiá: {round(last_close,2)}\nTín hiệu: Cắt lên MA20"
+        send_telegram(message)
+
+@app.route("/scan")
+def run_scan():
+    watchlist = ["HPG.HM", "VCB.HM", "FPT.HM", "MWG.HM", "BSR.HM", "PVD.HN", "PVS.HN", "PLX.HM"]
+
+    for stock in watchlist:
+        scan_stock(stock)
+
+    return "Scan complete"
+
+@app.route("/")
+def home():
+    return "Bot is running"
 
 

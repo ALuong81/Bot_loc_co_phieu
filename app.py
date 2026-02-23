@@ -28,13 +28,13 @@ def send_telegram(message):
 
 # ================= MARKET FILTER =================
 
-def market_trend_ok():
-    try:
-        data = yf.download("^VNINDEX", period="60d", progress=False)
-        data["MA20"] = data["Close"].rolling(20).mean()
-        return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
-    except:
-        return False
+# def market_trend_ok():
+#    try:
+#        data = yf.download("^VNINDEX", period="60d", progress=False)
+#        data["MA20"] = data["Close"].rolling(20).mean()
+#        return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
+#   except:
+#        return False
 
 # ================= SECTOR ROTATION =================
 
@@ -147,8 +147,8 @@ def run_scan():
 
     try:
 
-        if not market_trend_ok():
-            return "OK"
+#        if not market_trend_ok():
+#            return "OK"
 
         strong_sectors = sector_strength()
 
@@ -198,4 +198,5 @@ def run_scan():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 

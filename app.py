@@ -23,6 +23,14 @@ CHAT_ID = "-5008303605"
 
 SIGNAL_FILE = "signals.csv"
 
+def ensure_signal_file():
+
+    columns = ["date","ticker","sector","price","entry","stop","rr","score"]
+
+    if not os.path.exists(SIGNAL_FILE) or os.path.getsize(SIGNAL_FILE) == 0:
+        df = pd.DataFrame(columns=columns)
+        df.to_csv(SIGNAL_FILE, index=False)
+
 # ================= TELEGRAM =================
 
 def send_telegram(message):
@@ -40,15 +48,11 @@ def send_telegram(message):
 # ================= SAVE SIGNAL =================
 
 def save_signal(data):
-    try:
-        df = pd.DataFrame([data])
 
-        if os.path.exists(SIGNAL_FILE):
-            df.to_csv(SIGNAL_FILE, mode='a', header=False, index=False)
-        else:
-            df.to_csv(SIGNAL_FILE, index=False)
-    except Exception as e:
-        print("Save error:", e)
+    ensure_signal_file()
+
+    df = pd.DataFrame([data])
+    df.to_csv(SIGNAL_FILE, mode='a', header=False, index=False)
 
 # ================= SAFE DOWNLOAD =================
 
@@ -160,19 +164,16 @@ def dashboard():
 
     try:
 
-        if not os.path.exists(SIGNAL_FILE):
-            return "Chưa có tín hiệu nào"
-
-        if os.path.getsize(SIGNAL_FILE) == 0:
-            return "File tín hiệu đang rỗng"
+        ensure_signal_file()
 
         df = pd.read_csv(SIGNAL_FILE)
 
         if df.empty:
-            return "Chưa có dữ liệu hợp lệ"
+            return "Chưa có tín hiệu nào"
 
         return df.to_html(index=False)
 
     except Exception as e:
         return f"Lỗi dashboard: {e}"
+
 

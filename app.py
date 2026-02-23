@@ -4,7 +4,6 @@ import yfinance as yf
 import pandas as pd
 import os
 import warnings
-from datetime import datetime
 
 warnings.filterwarnings("ignore")
 
@@ -27,6 +26,43 @@ def send_telegram(message):
     except:
         pass
 
+# ================= MARKET FILTER =================
+
+def market_trend_ok():
+    try:
+        data = yf.download("^VNINDEX", period="60d", progress=False)
+        data["MA20"] = data["Close"].rolling(20).mean()
+        return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
+    except:
+        return False
+
+# ================= SECTOR ROTATION =================
+
+def sector_strength():
+    try:
+        vn = yf.download("^VNINDEX", period="40d", progress=False)
+        vn_return = (vn["Close"].iloc[-1] / vn["Close"].iloc[-20]) - 1
+
+        sectors = {
+            "BANKING": "KBE",
+            "TECH": "XLK",
+            "OIL": "XLE",
+            "REAL": "VNQ",
+            "FINANCE": "XLF"
+        }
+
+        strong = []
+
+        for name, ticker in sectors.items():
+            data = yf.download(ticker, period="40d", progress=False)
+            ret = (data["Close"].iloc[-1] / data["Close"].iloc[-20]) - 1
+            if ret > vn_return:
+                strong.append(name)
+
+        return strong
+    except:
+        return []
+
 # ================= INDICATORS =================
 
 def calculate_indicators(data):
@@ -35,81 +71,68 @@ def calculate_indicators(data):
     data["High20"] = data["High"].rolling(20).max()
     data["VolMA20"] = data["Volume"].rolling(20).mean()
 
-    delta = data["Close"].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-    rs = avg_gain / avg_loss
-    data["RSI"] = 100 - (100 / (1 + rs))
-
-    ema12 = data["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = data["Close"].ewm(span=26, adjust=False).mean()
-    data["MACD"] = ema12 - ema26
-    data["Signal"] = data["MACD"].ewm(span=9, adjust=False).mean()
-
     return data
 
 # ================= SCORING =================
 
 def score_stock(data):
     last = data.iloc[-1]
-    prev = data.iloc[-2]
-
     score = 0
 
     if last["Close"] > last["MA20"]:
-        score += 15
-
-    if last["Close"] >= last["High20"]:
         score += 20
 
-    if 55 <= last["RSI"] <= 70:
-        score += 15
+    if last["Close"] >= last["High20"]:
+        score += 25
 
-    if prev["MACD"] < prev["Signal"] and last["MACD"] > last["Signal"]:
+    if last["Close"] > last["MA50"]:
         score += 15
 
     if last["Volume"] > 1.5 * last["VolMA20"]:
-        score += 15
+        score += 20
 
     if last["MA20"] > data["MA20"].iloc[-5]:
-        score += 10
-
-    if last["Close"] > last["MA50"]:
-        score += 10
+        score += 20
 
     return score
 
-# ================= MARKET FILTER =================
-
-def market_trend_ok():
-    try:
-        data = yf.download("^VNINDEX", period="60d", interval="1d", progress=False)
-        if len(data) < 30:
-            return False
-
-        data["MA20"] = data["Close"].rolling(20).mean()
-        return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
-    except:
-        return False
-
-# ================= STOCK SCAN =================
+# ================= SCAN STOCK =================
 
 def scan_stock(ticker):
     try:
-        data = yf.download(ticker, period="120d", interval="1d", progress=False)
-
+        data = yf.download(ticker, period="120d", progress=False)
         if len(data) < 60:
             return None
 
         data = calculate_indicators(data)
         score = score_stock(data)
 
-        if score >= 50:
-            return (ticker, score)
+        if score < 55:
+            return None
 
-        return None
+        last = data.iloc[-1]
+        entry = last["High20"] * 1.01
+        stop = data["Low"].iloc[-5:].min()
+        risk = entry - stop
+
+        if risk <= 0:
+            return None
+
+        target = entry + 2 * risk
+        rr = (target - entry) / risk
+
+        if rr < 1.8:
+            return None
+
+        return {
+            "ticker": ticker,
+            "score": score,
+            "entry": round(entry, 2),
+            "stop": round(stop, 2),
+            "rr": round(rr, 2),
+            "price": round(last["Close"], 2)
+        }
+
     except:
         return None
 
@@ -117,7 +140,7 @@ def scan_stock(ticker):
 
 @app.route("/")
 def home():
-    return "LEVEL 4 SCANNER RUNNING"
+    return "LEVEL 6 - SECTOR ROTATION RUNNING"
 
 @app.route("/scan")
 def run_scan():
@@ -127,33 +150,43 @@ def run_scan():
         if not market_trend_ok():
             return "OK"
 
-        watchlist = [
-            "HPG.HM","VCB.HM","FPT.HM","MWG.HM",
-            "SSI.HM","VND.HM","DIG.HM","DXG.HM",
-            "SHS.HN","PVS.HN","DGC.HM","CTG.HM"
-        ]
+        strong_sectors = sector_strength()
+
+        if not strong_sectors:
+            return "OK"
+
+        sector_map = {
+            "BANKING": ["VCB.HM","CTG.HM","TCB.HM"],
+            "TECH": ["FPT.HM"],
+            "OIL": ["PVS.HN","GAS.HM"],
+            "REAL": ["DIG.HM","DXG.HM"],
+            "FINANCE": ["SSI.HM","VND.HM"]
+        }
 
         results = []
 
-        for stock in watchlist:
-            res = scan_stock(stock)
-            if res:
-                results.append(res)
+        for sector in strong_sectors:
+            for stock in sector_map.get(sector, []):
+                res = scan_stock(stock)
+                if res:
+                    res["sector"] = sector
+                    results.append(res)
 
         if results:
-            results.sort(key=lambda x: x[1], reverse=True)
+
+            results.sort(key=lambda x: x["score"], reverse=True)
             top = results[:5]
 
-            message = "🏆 <b>TOP CỔ PHIẾU MẠNH NHẤT HÔM NAY</b>\n\n"
+            message = "🔥 <b>NGÀNH DẪN SÓNG</b>\n\n"
 
-            for ticker, score in top:
-                rank = "B"
-                if score >= 65:
-                    rank = "A"
-                if score >= 80:
-                    rank = "A+"
-
-                message += f"{ticker} | {rank} | {score}/100\n"
+            for item in top:
+                message += (
+                    f"{item['ticker']} ({item['sector']})\n"
+                    f"Giá: {item['price']}\n"
+                    f"Entry: {item['entry']}\n"
+                    f"Stop: {item['stop']}\n"
+                    f"RR: {item['rr']}R\n\n"
+                )
 
             send_telegram(message)
 
@@ -161,8 +194,6 @@ def run_scan():
         pass
 
     return "OK"
-
-# ================= RUN =================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))

@@ -156,11 +156,11 @@ def run_scan():
             return "OK"
 
         sector_map = {
-            "BANKING": ["VCB.HM","CTG.HM","TCB.HM"],
-            "TECH": ["FPT.HM", "CMG.HM", "VGI.HN", "CTR.HM"],
-            "OIL": ["PVS.HN","GAS.HM", "BSR.HM", "PVD.HN", "OIL.HN"],
-            "REAL": ["DIG.HM","DXG.HM","CII.HM", "CEO.HN"],
-            "FINANCE": ["SSI.HM","VND.HM", "EVF.HM", "VDS.HM"]
+            "BANKING": ["VCB.HM","CTG.HM","TCB.HM", "MBB.HM", "VPB.HM", "LPB.HM"],
+            "TECH": ["FPT.HM", "CMG.HM", "VGI.HN", "CTR.HM", "ELC.HM"],
+            "OIL": ["PVS.HN","GAS.HM", "BSR.HM", "PVD.HN", "OIL.HN", "CNG.HM", "PVB.HN", "PVC.HN"],
+            "REAL": ["DIG.HM","DXG.HM","CII.HM", "CEO.HN", "HDC.HM", "CSC.HN", "PDR.HM"],
+            "FINANCE": ["SSI.HM","VND.HM", "EVF.HM", "VDS.HM", "VCI.HM", "VIX.HM", "FTS.HM"]
         }
 
         results = []
@@ -198,5 +198,6 @@ def run_scan():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 

@@ -159,13 +159,17 @@ def run_scan():
 def dashboard():
 
     try:
+
         if not os.path.exists(SIGNAL_FILE):
             return "Chưa có tín hiệu nào"
+
+        if os.path.getsize(SIGNAL_FILE) == 0:
+            return "File tín hiệu đang rỗng"
 
         df = pd.read_csv(SIGNAL_FILE)
 
         if df.empty:
-            return "File rỗng"
+            return "Chưa có dữ liệu hợp lệ"
 
         return df.to_html(index=False)
 

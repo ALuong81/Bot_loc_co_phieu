@@ -1,11 +1,12 @@
+import warnings
+warnings.filterwarnings("ignore")
+app = Flask(__name__)
 from flask import Flask
 import requests
 import yfinance as yf
 import pandas as pd
 import os
 from datetime import datetime
-
-app = Flask(__name__)
 
 BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
@@ -116,49 +117,41 @@ def home():
 @app.route("/scan")
 def run_scan():
 
-    today = datetime.now().date()
+    try:
+        if not market_trend_ok():
+            return "OK"
 
-    if not market_trend_ok():
-        return "Market not favorable"
+        watchlist = [
+            "HPG.HM","VCB.HM","FPT.HM","MWG.HM",
+            "SSI.HM","VND.HM","DIG.HM","DXG.HM",
+            "SHS.HN","PVS.HN","DGC.HM","CTG.HM"
+        ]
 
-    watchlist = [
-        "HPG.HM","VCB.HM","FPT.HM","MWG.HM",
-        "SSI.HM","VND.HM","DIG.HM","DXG.HM",
-        "SHS.HN","PVS.HN","DGC.HM","CTG.HM"
-    ]
+        results = []
 
-    results = []
+        for stock in watchlist:
+            res = scan_stock(stock)
+            if res:
+                results.append(res)
 
-    for stock in watchlist:
-        res = scan_stock(stock)
-        if res:
-            results.append(res)
+        if results:
+            results.sort(key=lambda x: x[1], reverse=True)
+            top = results[:5]
 
-    if not results:
-        return "OK - No strong signals"
+            message = "🏆 <b>TOP CỔ PHIẾU MẠNH NHẤT</b>\n\n"
+            for ticker, score in top:
+                message += f"{ticker} | {score}/100\n"
 
-    # sort theo điểm cao
-    results.sort(key=lambda x: x[1], reverse=True)
+            send_telegram(message)
 
-    top = results[:5]
+    except Exception as e:
+        print("Error:", e)
 
-    message = "🏆 <b>TOP CỔ PHIẾU MẠNH NHẤT HÔM NAY</b>\n\n"
-
-    for ticker, score in top:
-        rank = "B"
-        if score >= 65:
-            rank = "A"
-        if score >= 80:
-            rank = "A+"
-
-        message += f"📊 {ticker} | {rank} | {score}/100\n"
-
-    send_telegram(message)
-
-    return f"OK - {len(top)} sent"
+    return "OK"
 
 # ================= RUN =================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+

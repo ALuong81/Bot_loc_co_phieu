@@ -1,28 +1,31 @@
-import warnings
-warnings.filterwarnings("ignore")
-app = Flask(__name__)
 from flask import Flask
 import requests
 import yfinance as yf
 import pandas as pd
 import os
+import warnings
 from datetime import datetime
+
+warnings.filterwarnings("ignore")
+
+app = Flask(__name__)
 
 BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
 
-sent_today = {}
-
 # ================= TELEGRAM =================
 
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    requests.post(url, json=payload, timeout=10)
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        requests.post(url, json=payload, timeout=10)
+    except:
+        pass
 
 # ================= INDICATORS =================
 
@@ -32,7 +35,6 @@ def calculate_indicators(data):
     data["High20"] = data["High"].rolling(20).max()
     data["VolMA20"] = data["Volume"].rolling(20).mean()
 
-    # RSI
     delta = data["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -41,7 +43,6 @@ def calculate_indicators(data):
     rs = avg_gain / avg_loss
     data["RSI"] = 100 - (100 / (1 + rs))
 
-    # MACD
     ema12 = data["Close"].ewm(span=12, adjust=False).mean()
     ema26 = data["Close"].ewm(span=26, adjust=False).mean()
     data["MACD"] = ema12 - ema26
@@ -83,30 +84,34 @@ def score_stock(data):
 # ================= MARKET FILTER =================
 
 def market_trend_ok():
-    data = yf.download("^VNINDEX", period="60d", interval="1d", progress=False)
+    try:
+        data = yf.download("^VNINDEX", period="60d", interval="1d", progress=False)
+        if len(data) < 30:
+            return False
 
-    if len(data) < 30:
+        data["MA20"] = data["Close"].rolling(20).mean()
+        return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
+    except:
         return False
-
-    data["MA20"] = data["Close"].rolling(20).mean()
-
-    return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
 
 # ================= STOCK SCAN =================
 
 def scan_stock(ticker):
-    data = yf.download(ticker, period="120d", interval="1d", progress=False)
+    try:
+        data = yf.download(ticker, period="120d", interval="1d", progress=False)
 
-    if len(data) < 60:
+        if len(data) < 60:
+            return None
+
+        data = calculate_indicators(data)
+        score = score_stock(data)
+
+        if score >= 50:
+            return (ticker, score)
+
         return None
-
-    data = calculate_indicators(data)
-    score = score_stock(data)
-
-    if score >= 50:
-        return (ticker, score)
-
-    return None
+    except:
+        return None
 
 # ================= ROUTES =================
 
@@ -118,6 +123,7 @@ def home():
 def run_scan():
 
     try:
+
         if not market_trend_ok():
             return "OK"
 
@@ -138,14 +144,21 @@ def run_scan():
             results.sort(key=lambda x: x[1], reverse=True)
             top = results[:5]
 
-            message = "🏆 <b>TOP CỔ PHIẾU MẠNH NHẤT</b>\n\n"
+            message = "🏆 <b>TOP CỔ PHIẾU MẠNH NHẤT HÔM NAY</b>\n\n"
+
             for ticker, score in top:
-                message += f"{ticker} | {score}/100\n"
+                rank = "B"
+                if score >= 65:
+                    rank = "A"
+                if score >= 80:
+                    rank = "A+"
+
+                message += f"{ticker} | {rank} | {score}/100\n"
 
             send_telegram(message)
 
-    except Exception as e:
-        print("Error:", e)
+    except:
+        pass
 
     return "OK"
 
@@ -154,4 +167,3 @@ def run_scan():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-

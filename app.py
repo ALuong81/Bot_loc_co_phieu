@@ -21,7 +21,7 @@ app = Flask(__name__)
 BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
 
-SIGNAL_FILE = "signals.csv"
+SIGNAL_FILE = "signals.xlsx"
 
 def ensure_signal_file():
 
@@ -175,5 +175,6 @@ def dashboard():
 
     except Exception as e:
         return f"Lỗi dashboard: {e}"
+
 
 

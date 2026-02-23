@@ -99,7 +99,7 @@ def scan_stock(ticker):
     data = calculate_indicators(data)
     score = score_stock(data)
 
-    if score < 55:
+    if score < 30:
         return None
 
     last = data.iloc[-1]
@@ -175,3 +175,4 @@ def dashboard():
 
     except Exception as e:
         return f"Lỗi dashboard: {e}"
+

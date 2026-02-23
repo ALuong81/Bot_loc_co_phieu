@@ -1,7 +1,7 @@
 from flask import Flask, request
 import requests
 
-BOT_TOKEN = "8542992523:AAGS2aWbjz0O1oDRruqg7ABgRQfRcX5iF6Q"
+BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
 
 app = Flask(__name__)
@@ -27,4 +27,5 @@ def webhook():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 

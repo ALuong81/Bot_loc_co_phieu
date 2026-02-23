@@ -18,8 +18,7 @@ def send_telegram(message):
     requests.post(url, json=payload)
 
 def scan_stock(ticker):
-    data = yf.download(ticker, period="5d", interval="1h")
-
+    data = yf.download(ticker, period="120d", interval="1d", progress=False)
     if len(data) < 50:
         return
 
@@ -40,15 +39,24 @@ def home():
 
 @app.route("/scan")
 def run_scan():
-    send_telegram("🔥 TEST SCAN OK")
-    watchlist = ["HPG.HM", "VCB.HM", "FPT.HM", "MWG.HM"]
+
+    watchlist = [
+        "HPG.HM","VCB.HM","FPT.HM","MWG.HM",
+        "SSI.HM","VND.HM","DIG.HM","DXG.HM",
+        "SHS.HN","PVS.HN","DGC.HM","CTG.HM"
+    ]
+
+    count = 0
 
     for stock in watchlist:
-        scan_stock(stock)
+        res = scan_stock(stock)
+        if res:
+            count += 1
 
-    return "Scan complete"
-
+    return f"OK - {count} signals"
+   
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 

@@ -1,9 +1,10 @@
-from flask import Flask
+from flask import Flask, render_template_string
 import requests
 import yfinance as yf
 import pandas as pd
 import os
 import warnings
+from datetime import datetime
 
 warnings.filterwarnings("ignore")
 
@@ -11,6 +12,8 @@ app = Flask(__name__)
 
 BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
+
+SIGNAL_FILE = "signals.csv"
 
 # ================= TELEGRAM =================
 
@@ -26,15 +29,14 @@ def send_telegram(message):
     except:
         pass
 
-# ================= MARKET FILTER =================
+# ================= SAVE SIGNAL =================
 
-# def market_trend_ok():
-#    try:
-#        data = yf.download("^VNINDEX", period="60d", progress=False)
-#        data["MA20"] = data["Close"].rolling(20).mean()
-#        return data["Close"].iloc[-1] > data["MA20"].iloc[-1]
-#   except:
-#        return False
+def save_signal(data):
+    df = pd.DataFrame([data])
+    if os.path.exists(SIGNAL_FILE):
+        df.to_csv(SIGNAL_FILE, mode='a', header=False, index=False)
+    else:
+        df.to_csv(SIGNAL_FILE, index=False)
 
 # ================= SECTOR ROTATION =================
 
@@ -70,10 +72,7 @@ def calculate_indicators(data):
     data["MA50"] = data["Close"].rolling(50).mean()
     data["High20"] = data["High"].rolling(20).max()
     data["VolMA20"] = data["Volume"].rolling(20).mean()
-
     return data
-
-# ================= SCORING =================
 
 def score_stock(data):
     last = data.iloc[-1]
@@ -81,22 +80,16 @@ def score_stock(data):
 
     if last["Close"] > last["MA20"]:
         score += 20
-
     if last["Close"] >= last["High20"]:
         score += 25
-
     if last["Close"] > last["MA50"]:
         score += 15
-
     if last["Volume"] > 1.5 * last["VolMA20"]:
         score += 20
-
     if last["MA20"] > data["MA20"].iloc[-5]:
         score += 20
 
     return score
-
-# ================= SCAN STOCK =================
 
 def scan_stock(ticker):
     try:
@@ -125,12 +118,13 @@ def scan_stock(ticker):
             return None
 
         return {
+            "date": datetime.now().strftime("%Y-%m-%d"),
             "ticker": ticker,
-            "score": score,
-            "entry": round(entry, 2),
-            "stop": round(stop, 2),
-            "rr": round(rr, 2),
-            "price": round(last["Close"], 2)
+            "price": round(last["Close"],2),
+            "entry": round(entry,2),
+            "stop": round(stop,2),
+            "rr": round(rr,2),
+            "score": score
         }
 
     except:
@@ -140,20 +134,14 @@ def scan_stock(ticker):
 
 @app.route("/")
 def home():
-    return "LEVEL 6 - SECTOR ROTATION RUNNING"
+    return "LEVEL 7 DASHBOARD READY"
 
 @app.route("/scan")
 def run_scan():
 
     try:
 
-#        if not market_trend_ok():
-#            return "OK"
-
         strong_sectors = sector_strength()
-
-        if not strong_sectors:
-            return "OK"
 
         sector_map = {
             "BANKING": ["VCB.HM","CTG.HM","TCB.HM", "MBB.HM", "VPB.HM", "LPB.HM"],
@@ -173,20 +161,19 @@ def run_scan():
                     results.append(res)
 
         if results:
-
             results.sort(key=lambda x: x["score"], reverse=True)
             top = results[:5]
 
-            message = "🔥 <b>NGÀNH DẪN SÓNG</b>\n\n"
+            message = "🔥 <b>SETUP NGÀNH DẪN SÓNG</b>\n\n"
 
             for item in top:
                 message += (
                     f"{item['ticker']} ({item['sector']})\n"
-                    f"Giá: {item['price']}\n"
-                    f"Entry: {item['entry']}\n"
-                    f"Stop: {item['stop']}\n"
-                    f"RR: {item['rr']}R\n\n"
+                    f"Entry: {item['entry']} | Stop: {item['stop']}\n"
+                    f"RR: {item['rr']}R | Score: {item['score']}\n\n"
                 )
+
+                save_signal(item)
 
             send_telegram(message)
 
@@ -195,9 +182,50 @@ def run_scan():
 
     return "OK"
 
+# ================= DASHBOARD =================
+
+@app.route("/dashboard")
+def dashboard():
+
+    if not os.path.exists(SIGNAL_FILE):
+        return "Chưa có dữ liệu"
+
+    df = pd.read_csv(SIGNAL_FILE)
+
+    html = """
+    <h2>📊 Dashboard Tín Hiệu</h2>
+    <table border=1 cellpadding=6>
+    <tr>
+        <th>Date</th>
+        <th>Ticker</th>
+        <th>Sector</th>
+        <th>Price</th>
+        <th>Entry</th>
+        <th>Stop</th>
+        <th>RR</th>
+        <th>Score</th>
+    </tr>
+    """
+
+    for _, row in df.iterrows():
+        html += f"""
+        <tr>
+            <td>{row['date']}</td>
+            <td>{row['ticker']}</td>
+            <td>{row['sector']}</td>
+            <td>{row['price']}</td>
+            <td>{row['entry']}</td>
+            <td>{row['stop']}</td>
+            <td>{row['rr']}</td>
+            <td>{row['score']}</td>
+        </tr>
+        """
+
+    html += "</table>"
+    return render_template_string(html)
+
+# ================= RUN =================
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
-
-

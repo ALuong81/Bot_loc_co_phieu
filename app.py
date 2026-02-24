@@ -6,7 +6,7 @@
 #            "FINANCE": ["SSI.VN","VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN"]
 #        }
 
-from flask import Flask, render_template_string
+from flask import Flask
 import requests
 import yfinance as yf
 import pandas as pd
@@ -21,15 +21,20 @@ app = Flask(__name__)
 BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
 CHAT_ID = "-5008303605"
 
-SIGNAL_FILE = "signals.xlsx"
+SIGNAL_FILE = "signals.csv"
+
+# ================= FILE SAFETY =================
 
 def ensure_signal_file():
-
     columns = ["date","ticker","sector","price","entry","stop","rr","score"]
 
-    if not os.path.exists(SIGNAL_FILE) or os.path.getsize(SIGNAL_FILE) == 0:
+    if not os.path.exists(SIGNAL_FILE):
         df = pd.DataFrame(columns=columns)
-        df.to_csv(SIGNAL_FILE, index=False)
+        df.to_csv(SIGNAL_FILE, index=False, encoding="utf-8")
+
+    elif os.path.getsize(SIGNAL_FILE) == 0:
+        df = pd.DataFrame(columns=columns)
+        df.to_csv(SIGNAL_FILE, index=False, encoding="utf-8")
 
 # ================= TELEGRAM =================
 
@@ -38,23 +43,26 @@ def send_telegram(message):
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": CHAT_ID,
-            "text": message,
-            "parse_mode": "HTML"
+            "text": message
         }
         requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print("Telegram error:", e)
+    except:
+        pass
 
 # ================= SAVE SIGNAL =================
 
 def save_signal(data):
-
     ensure_signal_file()
-
     df = pd.DataFrame([data])
-    df.to_csv(SIGNAL_FILE, mode='a', header=False, index=False)
+    df.to_csv(
+        SIGNAL_FILE,
+        mode='a',
+        header=False,
+        index=False,
+        encoding="utf-8"
+    )
 
-# ================= SAFE DOWNLOAD =================
+# ================= DATA DOWNLOAD =================
 
 def safe_download(ticker, period="120d"):
     try:
@@ -94,7 +102,10 @@ def score_stock(data):
     except:
         return 0
 
+# ================= SCAN =================
+
 def scan_stock(ticker):
+
     data = safe_download(ticker)
 
     if data is None or len(data) < 60:
@@ -103,6 +114,7 @@ def scan_stock(ticker):
     data = calculate_indicators(data)
     score = score_stock(data)
 
+    # giảm điều kiện để test dễ có tín hiệu
     if score < 30:
         return None
 
@@ -115,15 +127,15 @@ def scan_stock(ticker):
     if risk <= 0:
         return None
 
-    rr = 2
+    rr = round(2,2)
 
     return {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "ticker": ticker,
-        "sector": "N/A",
-        "price": round(last["Close"], 2),
-        "entry": round(entry, 2),
-        "stop": round(stop, 2),
+        "sector": "VN",
+        "price": round(last["Close"],2),
+        "entry": round(entry,2),
+        "stop": round(stop,2),
         "rr": rr,
         "score": score
     }
@@ -132,12 +144,13 @@ def scan_stock(ticker):
 
 @app.route("/")
 def home():
-    return "SYSTEM RUNNING"
+    return "BOT SYSTEM RUNNING"
 
 @app.route("/scan")
 def run_scan():
 
     try:
+
         watchlist = ["VCB.VN","CTG.VN","TCB.VN", "MBB.VN", "VPB.VN", "LPB.VN", "FPT.VN", "CMG.VN", "VGI.VN", "CTR.VN", "ELC.VN", "PVS.VN","GAS.VN", "BSR.VN", "PVD.VN", "OIL.VN", "CNG.VN", "PVB.VN", "PVC.VN" ,"DIG.VN","DXG.VN","CII.VN", "CEO.VN", "HDC.VN", "CSC.VN", "PDR.VN", "SSI.VN","VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN"]
 
         results = []
@@ -149,9 +162,10 @@ def run_scan():
                 save_signal(res)
 
         if results:
-            message = "🔥 SETUP HÔM NAY\n\n"
+            message = "SETUP HÔM NAY\n\n"
             for item in results:
                 message += f"{item['ticker']} | Score: {item['score']}\n"
+
             send_telegram(message)
 
     except Exception as e:
@@ -166,7 +180,7 @@ def dashboard():
 
         ensure_signal_file()
 
-        df = pd.read_csv(SIGNAL_FILE)
+        df = pd.read_csv(SIGNAL_FILE, encoding="utf-8")
 
         if df.empty:
             return "Chưa có tín hiệu nào"
@@ -176,11 +190,11 @@ def dashboard():
     except Exception as e:
         return f"Lỗi dashboard: {e}"
 
-@app.route("/test")
-def test_data():
-    data = yf.download("VCB.VN", period="60d", progress=False)
-    return f"Số dòng dữ liệu: {len(data)}"
-
-
+@app.route("/reset")
+def reset():
+    if os.path.exists(SIGNAL_FILE):
+        os.remove(SIGNAL_FILE)
+    ensure_signal_file()
+    return "Đã reset file tín hiệu"
 
 

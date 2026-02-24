@@ -209,30 +209,31 @@ def scan():
 
     results = []
 
-    for ticker in watchlist:
+    # Giới hạn mỗi lần scan 80 mã
+    limited_list = watchlist[:80]
+
+    for ticker in limited_list:
         signal = scan_stock(ticker)
 
         if signal:
             results.append(signal)
 
             message = f"""
-🚀 TÍN HIỆU MỚI
+🔥 TÍN HIỆU MẠNH
 
 Mã: {signal['ticker']}
 Giá: {signal['price']}
 Score: {signal['score']}
-Thời gian: {signal['date']}
 """
             send_telegram(message)
 
     save_signals(results)
 
     return jsonify({
-        "scanned": len(watchlist),
+        "scanned": len(limited_list),
         "signals_found": len(results)
     })
-
-
+    
 @app.route("/dashboard")
 def dashboard():
 
@@ -274,6 +275,7 @@ def test():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 

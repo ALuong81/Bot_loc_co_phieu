@@ -93,8 +93,8 @@ def score_stock(data):
             score += 25
         if last["Close"] > last["MA50"]:
             score += 15
-        if last["Volume"] > 1.5 * last["VolMA20"]:
-            score += 20
+        if last["Volume"] > last["VolMA20"]:
+            score += 10
         if last["MA20"] > data["MA20"].iloc[-5]:
             score += 20
 
@@ -115,7 +115,7 @@ def scan_stock(ticker):
     score = score_stock(data)
 
     # giảm điều kiện để test dễ có tín hiệu
-    if score < 30:
+    if score < 40:
         return None
 
     last = data.iloc[-1]
@@ -197,4 +197,8 @@ def reset():
     ensure_signal_file()
     return "Đã reset file tín hiệu"
 
+@app.route("/debug")
+def debug():
+    data = yf.download("VCB.VN", period="60d", progress=False)
+    return f"Số dòng: {len(data)} | Giá cuối: {data['Close'].iloc[-1] if len(data)>0 else 'No data'}"
 

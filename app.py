@@ -64,12 +64,24 @@ def save_signal(data):
 
 # ================= DATA DOWNLOAD =================
 
-def safe_download(ticker, period="120d"):
+def safe_download(ticker):
     try:
-        data = yf.download(ticker, period=period, progress=False)
+        data = yf.download(
+            ticker,
+            period="3mo",
+            progress=False,
+            auto_adjust=True
+        )
+
         if data is None or len(data) == 0:
             return None
+
+        # 🔥 BẮT BUỘC FLATTEN COLUMN
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
         return data
+
     except:
         return None
 
@@ -199,6 +211,10 @@ def reset():
 
 @app.route("/debug")
 def debug():
-    data = yf.download("VCB.VN", period="60d", progress=False)
-    return f"Số dòng: {len(data)} | Giá cuối: {data['Close'].iloc[-1] if len(data)>0 else 'No data'}"
+    data = safe_download("VCB.VN")
+
+    if data is None:
+        return "No data"
+
+    return f"Số dòng: {len(data)} | Giá cuối: {data['Close'].iloc[-1]}"
 

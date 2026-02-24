@@ -178,7 +178,8 @@ def dashboard():
 
 @app.route("/test")
 def test_data():
-    data = yf.download("VCB.HM", period="60d", progress=False)
+    data = yf.download("VCB.VN", period="60d", progress=False)
     return f"Số dòng dữ liệu: {len(data)}"
+
 
 

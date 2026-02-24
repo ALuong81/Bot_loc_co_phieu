@@ -121,7 +121,7 @@ def scan_stock(ticker):
 
     # Breakout
     if last["Close"] >= last["High20"]:
-        score += 40
+        score += 30
 
     # Volume
     if last["Volume"] > last["VolMA20"]:
@@ -129,9 +129,9 @@ def scan_stock(ticker):
 
     # Trend
     if last["Close"] > last["MA20"]:
-        score += 20
+        score += 15
 
-    if score < 40:
+    if score < 30:
         return None
 
     if is_duplicate(ticker):
@@ -244,5 +244,6 @@ def test():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 

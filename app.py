@@ -11,15 +11,15 @@ app = Flask(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-SIGNAL_FILE = "signals.xlsx"
-RANKING_FILE = "ranking.xlsx"
-SECTOR_FILE = "sector.xlsx"
+SIGNAL_FILE = "signals.csv"
+RANKING_FILE = "ranking.csv"
+SECTOR_FILE = "sector.csv"
 
 # ==============================
 # LOAD TICKERS + SECTOR MAP
 # ==============================
 def load_watchlist():
-    df = pd.read_csv("tickers.xlsx")
+    df = pd.read_csv("tickers.csv")
     return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
 
 # ==============================
@@ -230,5 +230,6 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 

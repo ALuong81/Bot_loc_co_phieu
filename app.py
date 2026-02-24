@@ -25,8 +25,13 @@ CHAT_ID = os.getenv("CHAT_ID")
 # =========================
 # WATCHLIST
 # =========================
-watchlist = ["VCB.VN", "CTG.VN","TCB.VN", "MBB.VN", "VPB.VN", "LPB.VN", "FPT.VN", "CMG.VN", "VGI.VN", "CTR.VN", "ELC.VN", "SSI.VN", "VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN", "DIG.VN", "DXG.VN", "CII.VN", "CEO.VN", "HDC.VN", "CSC.VN", "PDR.VN, "PVS.VN", "GAS.VN", "BSR.VN", "PVD.VN", "OIL.VN", "CNG.VN", "PVB.VN", "PVC.VN"]
-
+watchlist = [
+    "VCB.VN","CTG.VN","TCB.VN","MBB.VN","VPB.VN","LPB.VN",
+    "FPT.VN","CMG.VN","VGI.VN","CTR.VN","ELC.VN",
+    "SSI.VN","VND.VN","EVF.VN","VDS.VN","VCI.VN","VIX.VN","FTS.VN",
+    "DIG.VN","DXG.VN","CII.VN","CEO.VN","HDC.VN","CSC.VN","PDR.VN",
+    "PVS.VN","GAS.VN","BSR.VN","PVD.VN","OIL.VN","CNG.VN","PVB.VN","PVC.VN"
+]
 # =========================
 # TELEGRAM
 # =========================
@@ -239,4 +244,5 @@ def test():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 

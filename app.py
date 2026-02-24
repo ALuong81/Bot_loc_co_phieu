@@ -78,7 +78,23 @@ def safe_download(ticker):
     except:
         return None
 
+def universe_filter(ticker):
 
+    data = safe_download(ticker)
+    if data is None or len(data) < 30:
+        return False
+
+    last = data.iloc[-1]
+    vol_ma20 = data["Volume"].rolling(20).mean().iloc[-1]
+
+    # Điều kiện lọc sơ cấp
+    if last["Close"] < 5:
+        return False
+
+    if vol_ma20 < 500000:
+        return False
+
+    return True
 # =========================
 # CHECK DUPLICATE
 # =========================
@@ -111,27 +127,42 @@ def scan_stock(ticker):
     if data is None:
         return None
 
+    if not universe_filter(ticker):
+        return None
+
     data["MA20"] = data["Close"].rolling(20).mean()
+    data["MA50"] = data["Close"].rolling(50).mean()
     data["High20"] = data["High"].rolling(20).max()
     data["VolMA20"] = data["Volume"].rolling(20).mean()
+
+    delta = data["Close"].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+    rs = avg_gain / avg_loss
+    data["RSI"] = 100 - (100 / (1 + rs))
 
     last = data.iloc[-1]
 
     score = 0
 
-    # Breakout
     if last["Close"] >= last["High20"]:
         score += 30
 
-    # Volume
-    if last["Volume"] > last["VolMA20"]:
+    if last["Volume"] > 1.5 * last["VolMA20"]:
         score += 20
 
-    # Trend
     if last["Close"] > last["MA20"]:
         score += 15
 
-    if score < 30:
+    if last["MA20"] > last["MA50"]:
+        score += 15
+
+    if last["RSI"] > 55:
+        score += 10
+
+    if score < 60:
         return None
 
     if is_duplicate(ticker):
@@ -143,7 +174,6 @@ def scan_stock(ticker):
         "price": round(last["Close"], 2),
         "score": score
     }
-
 
 # =========================
 # SAVE SIGNAL
@@ -244,6 +274,7 @@ def test():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 

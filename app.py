@@ -1,15 +1,6 @@
-#        sector_map = {
-#            "BANKING": ["VCB.VN","CTG.VN","TCB.VN", "MBB.VN", "VPB.VN", "LPB.VN"],
-#            "TECH": ["FPT.VN", "CMG.VN", "VGI.VN", "CTR.VN", "ELC.VN"],
-#            "OIL": ["PVS.VN","GAS.VN", "BSR.VN", "PVD.VN", "OIL.VN", "CNG.VN", "PVB.VN", "PVC.VN"],
-#            "REAL": ["DIG.VN","DXG.VN","CII.VN", "CEO.VN", "HDC.VN", "CSC.VN", "PDR.VN"],
-#            "FINANCE": ["SSI.VN","VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN"]
-#        }
-
-# BOT_TOKEN = "8542992523:AAELdFNjsGb-3Gl8KEOhd17ZH7OPLQTyD8o"
-# CHAT_ID = "-5008303605"
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from flask import Flask, jsonify
 from datetime import datetime
 import os
@@ -17,266 +8,227 @@ import requests
 
 app = Flask(__name__)
 
-SIGNAL_FILE = "signals.xlsx"
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# =========================
-# WATCHLIST
-# =========================
-watchlist = [
-    "VCB.VN","CTG.VN","TCB.VN","MBB.VN","VPB.VN","LPB.VN",
-    "FPT.VN","CMG.VN","VGI.VN","CTR.VN","ELC.VN",
-    "SSI.VN","VND.VN","EVF.VN","VDS.VN","VCI.VN","VIX.VN","FTS.VN",
-    "DIG.VN","DXG.VN","CII.VN","CEO.VN","HDC.VN","CSC.VN","PDR.VN",
-    "PVS.VN","GAS.VN","BSR.VN","PVD.VN","OIL.VN","CNG.VN","PVB.VN","PVC.VN"
-]
-# =========================
+SIGNAL_FILE = "signals.xlsx"
+RANKING_FILE = "ranking.xlsx"
+SECTOR_FILE = "sector.xlsx"
+
+# ==============================
+# LOAD TICKERS + SECTOR MAP
+# ==============================
+def load_watchlist():
+    df = pd.read_csv("tickers.xlsx")
+    return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
+
+# ==============================
 # TELEGRAM
-# =========================
-def send_telegram(message):
-
+# ==============================
+def send_telegram(msg):
     if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram chưa cấu hình")
         return
-
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-
+    payload = {"chat_id": CHAT_ID, "text": msg}
     try:
         requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print("Telegram error:", e)
-
-
-# =========================
-# SAFE DOWNLOAD
-# =========================
-def safe_download(ticker):
-    try:
-        data = yf.download(
-            ticker,
-            period="3mo",
-            progress=False,
-            auto_adjust=True,
-            timeout=10
-        )
-
-        if data is None or len(data) < 30:
-            return None
-
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-
-        return data
-
     except:
-        return None
+        pass
 
-def universe_filter(ticker):
+# ==============================
+# INDICATORS
+# ==============================
+def compute_indicators(df):
 
-    data = safe_download(ticker)
-    if data is None or len(data) < 30:
-        return False
+    df["MA20"] = df["Close"].rolling(20).mean()
+    df["MA50"] = df["Close"].rolling(50).mean()
+    df["High20"] = df["High"].rolling(20).max()
+    df["VolMA20"] = df["Volume"].rolling(20).mean()
 
-    last = data.iloc[-1]
-    vol_ma20 = data["Volume"].rolling(20).mean().iloc[-1]
-
-    # Điều kiện lọc sơ cấp
-    if last["Close"] < 5:
-        return False
-
-    if vol_ma20 < 500000:
-        return False
-
-    return True
-# =========================
-# CHECK DUPLICATE
-# =========================
-def is_duplicate(ticker):
-
-    if not os.path.exists(SIGNAL_FILE):
-        return False
-
-    try:
-        df = pd.read_csv(SIGNAL_FILE)
-    except:
-        return False
-
-    if len(df) == 0:
-        return False
-
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    df_today = df[df["date"].str.contains(today)]
-
-    return ticker in df_today["ticker"].values
-
-
-# =========================
-# SCAN LOGIC
-# =========================
-def scan_stock(ticker):
-
-    data = safe_download(ticker)
-    if data is None:
-        return None
-
-    if not universe_filter(ticker):
-        return None
-
-    data["MA20"] = data["Close"].rolling(20).mean()
-    data["MA50"] = data["Close"].rolling(50).mean()
-    data["High20"] = data["High"].rolling(20).max()
-    data["VolMA20"] = data["Volume"].rolling(20).mean()
-
-    delta = data["Close"].diff()
+    # RSI
+    delta = df["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
     avg_gain = gain.rolling(14).mean()
     avg_loss = loss.rolling(14).mean()
     rs = avg_gain / avg_loss
-    data["RSI"] = 100 - (100 / (1 + rs))
+    df["RSI"] = 100 - (100 / (1 + rs))
 
-    last = data.iloc[-1]
+    # CMF (20)
+    mf = ((df["Close"] - df["Low"]) - (df["High"] - df["Close"])) / (df["High"] - df["Low"])
+    mf = mf.replace([np.inf, -np.inf], 0).fillna(0)
+    df["CMF"] = (mf * df["Volume"]).rolling(20).sum() / df["Volume"].rolling(20).sum()
+
+    return df
+
+# ==============================
+# SCORE ENGINE
+# ==============================
+def score_stock(df):
+
+    last = df.iloc[-1]
 
     score = 0
+    breakout = False
+    pullback = False
 
-    if last["Close"] >= last["High20"]:
-        score += 30
-
-    if last["Volume"] > 1.5 * last["VolMA20"]:
+    # Trend
+    if last["MA20"] > last["MA50"]:
         score += 20
 
-    if last["Close"] > last["MA20"]:
+    # Breakout
+    if last["Close"] >= last["High20"]:
+        score += 25
+        breakout = True
+
+    # Pullback strong trend
+    if last["Close"] > last["MA20"] and last["Close"] < last["High20"]:
+        score += 10
+        pullback = True
+
+    # Volume
+    vol_ratio = last["Volume"] / last["VolMA20"] if last["VolMA20"] > 0 else 0
+    if vol_ratio > 1.5:
         score += 15
 
-    if last["MA20"] > last["MA50"]:
+    # Money flow
+    if last["CMF"] > 0:
         score += 15
 
-    if last["RSI"] > 55:
+    # RSI
+    if 50 < last["RSI"] < 70:
         score += 10
 
-    if score < 60:
-        return None
+    return score, breakout, pullback, vol_ratio
 
-    if is_duplicate(ticker):
-        return None
-
-    return {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "ticker": ticker,
-        "price": round(last["Close"], 2),
-        "score": score
-    }
-
-# =========================
-# SAVE SIGNAL
-# =========================
-def save_signals(results):
-
-    if len(results) == 0:
-        return
-
-    df_new = pd.DataFrame(results)
-
-    if os.path.exists(SIGNAL_FILE):
-        try:
-            df_old = pd.read_csv(SIGNAL_FILE)
-            df = pd.concat([df_old, df_new], ignore_index=True)
-        except:
-            df = df_new
+# ==============================
+# SAVE FUNCTIONS
+# ==============================
+def save_append(file, df_new):
+    if os.path.exists(file):
+        df_old = pd.read_csv(file)
+        df = pd.concat([df_old, df_new], ignore_index=True)
     else:
         df = df_new
+    df.to_csv(file, index=False)
 
-    df.to_csv(SIGNAL_FILE, index=False)
-
-
-# =========================
-# ROUTES
-# =========================
-@app.route("/")
-def home():
-    return "Bot đang chạy ổn định."
-
+# ==============================
+# SCAN ROUTE
+# ==============================
 @app.route("/scan")
 def scan():
 
-    results = []
+    tickers, sector_map = load_watchlist()
+    today = datetime.now().strftime("%Y-%m-%d")
 
-    # Giới hạn mỗi lần scan 80 mã
-    limited_list = watchlist[:80]
+    ranking_rows = []
+    signal_rows = []
 
-    for ticker in limited_list:
-        signal = scan_stock(ticker)
+    for ticker in tickers:
 
-        if signal:
-            results.append(signal)
+        try:
+            data = yf.download(ticker, period="6mo", progress=False)
+            if len(data) < 60:
+                continue
 
-            message = f"""
-🔥 TÍN HIỆU MẠNH
+            data = compute_indicators(data)
+            score, breakout, pullback, vol_ratio = score_stock(data)
 
-Mã: {signal['ticker']}
-Giá: {signal['price']}
-Score: {signal['score']}
-"""
-            send_telegram(message)
+            last = data.iloc[-1]
+            sector = sector_map.get(ticker, "UNKNOWN")
 
-    save_signals(results)
+            ranking_rows.append({
+                "date": today,
+                "ticker": ticker,
+                "sector": sector,
+                "price": round(last["Close"],2),
+                "score": score,
+                "liquidity": int(last["VolMA20"])
+            })
+
+            if score >= 60:
+                signal_rows.append({
+                    "date": today,
+                    "ticker": ticker,
+                    "sector": sector,
+                    "price": round(last["Close"],2),
+                    "score": score,
+                    "breakout": breakout,
+                    "pullback": pullback,
+                    "volume_ratio": round(vol_ratio,2),
+                    "cmf": round(last["CMF"],2),
+                    "rsi": round(last["RSI"],2),
+                    "hold_plan": "7-14 days"
+                })
+
+        except:
+            continue
+
+    # ==================
+    # SAVE RANKING
+    # ==================
+    if ranking_rows:
+        df_rank = pd.DataFrame(ranking_rows)
+        df_rank = df_rank.sort_values("score", ascending=False)
+        df_rank["rank"] = range(1, len(df_rank)+1)
+        save_append(RANKING_FILE, df_rank)
+
+    # ==================
+    # SAVE SIGNALS
+    # ==================
+    if signal_rows:
+        df_sig = pd.DataFrame(signal_rows)
+        save_append(SIGNAL_FILE, df_sig)
+
+        top_msg = df_sig.sort_values("score", ascending=False).head(5)
+        text = "🔥 TOP SIGNAL HÔM NAY\n\n"
+        for _, row in top_msg.iterrows():
+            text += f"{row['ticker']} | Score {row['score']} | {row['price']}\n"
+
+        send_telegram(text)
+
+    # ==================
+    # SECTOR ANALYSIS
+    # ==================
+    if ranking_rows:
+        df_sector = pd.DataFrame(ranking_rows)
+        sector_summary = df_sector.groupby("sector").agg({
+            "score":"mean",
+            "ticker":"count"
+        }).reset_index()
+
+        sector_summary["date"] = today
+        sector_summary.rename(columns={
+            "score":"avg_score",
+            "ticker":"stocks_count"
+        }, inplace=True)
+
+        save_append(SECTOR_FILE, sector_summary)
 
     return jsonify({
-        "scanned": len(limited_list),
-        "signals_found": len(results)
+        "scanned": len(tickers),
+        "signals": len(signal_rows)
     })
-    
+
+# ==============================
+# DASHBOARD
+# ==============================
 @app.route("/dashboard")
 def dashboard():
+    if not os.path.exists(RANKING_FILE):
+        return "Chưa có dữ liệu"
+    df = pd.read_csv(RANKING_FILE)
+    return df.sort_values("score", ascending=False).head(20).to_html()
 
-    if not os.path.exists(SIGNAL_FILE):
-        return "Chưa có tín hiệu nào"
+@app.route("/")
+def home():
+    return "Bot VN Stock Level Pro đang chạy."
 
-    try:
-        df = pd.read_csv(SIGNAL_FILE)
-    except:
-        return "Lỗi đọc file"
-
-    if len(df) == 0:
-        return "Chưa có tín hiệu nào"
-
-    # Thống kê
-    total = len(df)
-    best = df.sort_values("score", ascending=False).head(5)
-
-    html = f"""
-    <h2>Tổng số tín hiệu: {total}</h2>
-    <h3>Top 5 Score cao nhất</h3>
-    {best.to_html(index=False)}
-    <h3>20 tín hiệu gần nhất</h3>
-    {df.tail(20).to_html(index=False)}
-    """
-
-    return html
-
-
-@app.route("/test")
-def test():
-    send_telegram("Bot đã kết nối thành công.")
-    return "Đã gửi test Telegram"
-
-
-# =========================
+# ==============================
 # START
-# =========================
+# ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
-
-
 
 

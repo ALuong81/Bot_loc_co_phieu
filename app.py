@@ -176,5 +176,9 @@ def dashboard():
     except Exception as e:
         return f"Lỗi dashboard: {e}"
 
+@app.route("/test")
+def test_data():
+    data = yf.download("VCB.HM", period="60d", progress=False)
+    return f"Số dòng dữ liệu: {len(data)}"
 
 

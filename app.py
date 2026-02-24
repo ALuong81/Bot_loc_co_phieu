@@ -26,20 +26,20 @@ CHAT_ID = os.getenv("CHAT_ID")
 # WATCHLIST
 # =========================
 watchlist = [
-    "VCB.VN",
-    "FPT.VN",
-    "SSI.VN",
-    "DIG.VN",
-    "CTG.VN"
+    "VCB.VN","CTG.VN","TCB.VN", "MBB.VN", "VPB.VN", "LPB.VN",
+    "FPT.VN", "CMG.VN", "VGI.VN", "CTR.VN", "ELC.VN",
+    "SSI.VN","VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN,
+    "DIG.VN","DXG.VN","CII.VN", "CEO.VN", "HDC.VN", "CSC.VN", "PDR.VN,
+    "PVS.VN","GAS.VN", "BSR.VN", "PVD.VN", "OIL.VN", "CNG.VN", "PVB.VN", "PVC.VN"
 ]
 
 # =========================
-# TELEGRAM SEND
+# TELEGRAM
 # =========================
 def send_telegram(message):
 
     if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram chưa cấu hình.")
+        print("Telegram chưa cấu hình")
         return
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -68,7 +68,7 @@ def safe_download(ticker):
             timeout=10
         )
 
-        if data is None or len(data) == 0:
+        if data is None or len(data) < 30:
             return None
 
         if isinstance(data.columns, pd.MultiIndex):
@@ -81,13 +81,35 @@ def safe_download(ticker):
 
 
 # =========================
+# CHECK DUPLICATE
+# =========================
+def is_duplicate(ticker):
+
+    if not os.path.exists(SIGNAL_FILE):
+        return False
+
+    try:
+        df = pd.read_csv(SIGNAL_FILE)
+    except:
+        return False
+
+    if len(df) == 0:
+        return False
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    df_today = df[df["date"].str.contains(today)]
+
+    return ticker in df_today["ticker"].values
+
+
+# =========================
 # SCAN LOGIC
 # =========================
 def scan_stock(ticker):
 
     data = safe_download(ticker)
-
-    if data is None or len(data) < 25:
+    if data is None:
         return None
 
     data["MA20"] = data["Close"].rolling(20).mean()
@@ -98,16 +120,22 @@ def scan_stock(ticker):
 
     score = 0
 
+    # Breakout
     if last["Close"] >= last["High20"]:
         score += 40
 
+    # Volume
     if last["Volume"] > last["VolMA20"]:
         score += 20
 
+    # Trend
     if last["Close"] > last["MA20"]:
         score += 20
 
     if score < 40:
+        return None
+
+    if is_duplicate(ticker):
         return None
 
     return {
@@ -130,14 +158,14 @@ def save_signals(results):
 
     if os.path.exists(SIGNAL_FILE):
         try:
-            df_old = pd.read_csv(SIGNAL_FILE, encoding="utf-8")
+            df_old = pd.read_csv(SIGNAL_FILE)
             df = pd.concat([df_old, df_new], ignore_index=True)
         except:
             df = df_new
     else:
         df = df_new
 
-    df.to_csv(SIGNAL_FILE, index=False, encoding="utf-8")
+    df.to_csv(SIGNAL_FILE, index=False)
 
 
 # =========================
@@ -145,7 +173,7 @@ def save_signals(results):
 # =========================
 @app.route("/")
 def home():
-    return "Bot đang chạy + Telegram sẵn sàng."
+    return "Bot đang chạy ổn định."
 
 @app.route("/scan")
 def scan():
@@ -153,8 +181,8 @@ def scan():
     results = []
 
     for ticker in watchlist:
-        print("Scanning:", ticker)
         signal = scan_stock(ticker)
+
         if signal:
             results.append(signal)
 
@@ -183,24 +211,37 @@ def dashboard():
         return "Chưa có tín hiệu nào"
 
     try:
-        df = pd.read_csv(SIGNAL_FILE, encoding="utf-8")
+        df = pd.read_csv(SIGNAL_FILE)
     except:
         return "Lỗi đọc file"
 
     if len(df) == 0:
         return "Chưa có tín hiệu nào"
 
-    return df.tail(20).to_html()
+    # Thống kê
+    total = len(df)
+    best = df.sort_values("score", ascending=False).head(5)
+
+    html = f"""
+    <h2>Tổng số tín hiệu: {total}</h2>
+    <h3>Top 5 Score cao nhất</h3>
+    {best.to_html(index=False)}
+    <h3>20 tín hiệu gần nhất</h3>
+    {df.tail(20).to_html(index=False)}
+    """
+
+    return html
+
 
 @app.route("/test")
 def test():
     send_telegram("Bot đã kết nối thành công.")
-    return "Đã gửi"
-    
+    return "Đã gửi test Telegram"
+
+
 # =========================
 # START
 # =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-

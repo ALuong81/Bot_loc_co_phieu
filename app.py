@@ -1,9 +1,9 @@
 #        sector_map = {
-#            "BANKING": ["VCB.HM","CTG.HM","TCB.HM", "MBB.HM", "VPB.HM", "LPB.HM"],
-#            "TECH": ["FPT.HM", "CMG.HM", "VGI.HN", "CTR.HM", "ELC.HM"],
-#            "OIL": ["PVS.HN","GAS.HM", "BSR.HM", "PVD.HN", "OIL.HN", "CNG.HM", "PVB.HN", "PVC.HN"],
-#            "REAL": ["DIG.HM","DXG.HM","CII.HM", "CEO.HN", "HDC.HM", "CSC.HN", "PDR.HM"],
-#            "FINANCE": ["SSI.HM","VND.HM", "EVF.HM", "VDS.HM", "VCI.HM", "VIX.HM", "FTS.HM"]
+#            "BANKING": ["VCB.VN","CTG.VN","TCB.VN", "MBB.VN", "VPB.VN", "LPB.VN"],
+#            "TECH": ["FPT.VN", "CMG.VN", "VGI.VN", "CTR.VN", "ELC.VN"],
+#            "OIL": ["PVS.VN","GAS.VN", "BSR.VN", "PVD.VN", "OIL.VN", "CNG.VN", "PVB.VN", "PVC.VN"],
+#            "REAL": ["DIG.VN","DXG.VN","CII.VN", "CEO.VN", "HDC.VN", "CSC.VN", "PDR.VN"],
+#            "FINANCE": ["SSI.VN","VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN"]
 #        }
 
 from flask import Flask, render_template_string
@@ -138,7 +138,7 @@ def home():
 def run_scan():
 
     try:
-        watchlist = ["VCB.HM","CTG.HM","TCB.HM", "MBB.HM", "VPB.HM", "LPB.HM", "FPT.HM", "CMG.HM", "VGI.HN", "CTR.HM", "ELC.HM", "PVS.HN","GAS.HM", "BSR.HM", "PVD.HN", "OIL.HN", "CNG.HM", "PVB.HN", "PVC.HN" ,"DIG.HM","DXG.HM","CII.HM", "CEO.HN", "HDC.HM", "CSC.HN", "PDR.HM", "SSI.HM","VND.HM", "EVF.HM", "VDS.HM", "VCI.HM", "VIX.HM", "FTS.HM"]
+        watchlist = ["VCB.VN","CTG.VN","TCB.VN", "MBB.VN", "VPB.VN", "LPB.VN", "FPT.VN", "CMG.VN", "VGI.VN", "CTR.VN", "ELC.VN", "PVS.VN","GAS.VN", "BSR.VN", "PVD.VN", "OIL.VN", "CNG.VN", "PVB.VN", "PVC.VN" ,"DIG.VN","DXG.VN","CII.VN", "CEO.VN", "HDC.VN", "CSC.VN", "PDR.VN", "SSI.VN","VND.VN", "EVF.VN", "VDS.VN", "VCI.VN", "VIX.VN", "FTS.VN"]
 
         results = []
 
@@ -180,6 +180,7 @@ def dashboard():
 def test_data():
     data = yf.download("VCB.VN", period="60d", progress=False)
     return f"Số dòng dữ liệu: {len(data)}"
+
 
 
 

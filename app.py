@@ -243,34 +243,71 @@ def backtest():
     tickers, _ = load_watchlist()
 
     wins = 0
+    losses = 0
     total = 0
 
     for ticker in tickers:
 
         data = safe_download(ticker)
-        if data is None or len(data) < 120:
+        if data is None or len(data) < 150:
             continue
 
         data = compute_indicators(data)
 
         for i in range(60, len(data)-10):
 
-            sub = data.iloc[:i]
-            score, _, _, _ = score_stock(sub)
+            row = data.iloc[i]
 
-            if score >= 75:
-                entry = data.iloc[i]["Close"]
-                future = data.iloc[i:i+10]
+            # 1. Trend filter
+            if row["MA20"] <= row["MA50"]:
+                continue
 
-                if future["High"].max() >= entry * 1.12:
-                    wins += 1
-                total += 1
+            # 2. Breakout confirm
+            if row["Close"] < row["High20"]:
+                continue
+
+            # 3. Volume confirm
+            if row["Volume"] <= row["VolMA20"] * 1.5:
+                continue
+
+            # 4. RSI filter
+            if not (55 <= row["RSI"] <= 70):
+                continue
+
+            # 5. Money flow
+            if row["CMF"] <= 0:
+                continue
+
+            entry = row["Close"]
+            target = entry * 1.10
+            stop = entry * 0.95
+
+            future = data.iloc[i+1:i+11]
+
+            hit_target = False
+            hit_stop = False
+
+            for _, f in future.iterrows():
+                if f["Low"] <= stop:
+                    hit_stop = True
+                    break
+                if f["High"] >= target:
+                    hit_target = True
+                    break
+
+            if hit_target:
+                wins += 1
+            elif hit_stop:
+                losses += 1
+
+            total += 1
 
     winrate = round((wins/total)*100,2) if total > 0 else 0
 
     return jsonify({
         "total_trades": total,
         "wins": wins,
+        "losses": losses,
         "winrate_percent": winrate
     })
 
@@ -291,3 +328,4 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+

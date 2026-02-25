@@ -13,9 +13,9 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 SIGNAL_FILE = "signals.csv"
 
-# =================================
+# ======================================
 # LOAD WATCHLIST
-# =================================
+# ======================================
 def load_watchlist():
     try:
         df = pd.read_csv("tickers.csv")
@@ -23,9 +23,9 @@ def load_watchlist():
     except:
         return [], {}
 
-# =================================
+# ======================================
 # TELEGRAM
-# =================================
+# ======================================
 def send_telegram(msg):
     if not BOT_TOKEN or not CHAT_ID:
         return
@@ -36,11 +36,10 @@ def send_telegram(msg):
     except:
         pass
 
-# =================================
+# ======================================
 # SAFE DOWNLOAD
-# =================================
+# ======================================
 def safe_download(ticker):
-
     try:
         data = yf.download(
             ticker,
@@ -61,9 +60,9 @@ def safe_download(ticker):
     except:
         return None
 
-# =================================
+# ======================================
 # INDICATORS
-# =================================
+# ======================================
 def compute_indicators(df):
 
     df["MA20"] = df["Close"].rolling(20).mean()
@@ -85,9 +84,9 @@ def compute_indicators(df):
 
     return df
 
-# =================================
-# SCORE
-# =================================
+# ======================================
+# SCORE ENGINE
+# ======================================
 def score_stock(df):
 
     last = df.iloc[-1]
@@ -119,37 +118,84 @@ def score_stock(df):
 
     return score, breakout, pullback, vol_ratio
 
-# =================================
-# ROUTES
-# =================================
+# ======================================
+# SCAN ROUTE (LEVEL PRO)
+# ======================================
 @app.route("/scan")
 def scan():
 
     tickers, sector_map = load_watchlist()
 
     if not tickers:
-        return jsonify({"error":"tickers.csv not found or empty"})
+        return jsonify({"error":"tickers.csv missing"})
 
     today = datetime.now().strftime("%Y-%m-%d")
 
+    ranking = []
     signals = []
-    scanned = 0
 
+    # ======================
+    # STEP 1: Ranking all
+    # ======================
     for ticker in tickers:
 
         data = safe_download(ticker)
-
         if data is None or len(data) < 60:
             continue
 
-        scanned += 1
-
         data = compute_indicators(data)
         score, breakout, pullback, vol_ratio = score_stock(data)
+        last = data.iloc[-1]
 
-        if score < 75:
+        sector = sector_map.get(ticker, "UNKNOWN")
+
+        avg_value = last["Close"] * last["VolMA20"]
+
+        ranking.append({
+            "ticker": ticker,
+            "sector": sector,
+            "score": score,
+            "avg_value": avg_value
+        })
+
+    if not ranking:
+        return jsonify({"message":"No data from Yahoo"})
+
+    df_rank = pd.DataFrame(ranking)
+
+    # ======================
+    # STEP 2: Sector strength
+    # ======================
+    sector_strength = (
+        df_rank.groupby("sector")["score"]
+        .mean()
+        .reset_index()
+        .sort_values("score", ascending=False)
+    )
+
+    top_sectors = sector_strength.head(3)["sector"].tolist()
+
+    # ======================
+    # STEP 3: Generate signals
+    # ======================
+    for row in ranking:
+
+        if row["sector"] not in top_sectors:
             continue
 
+        if row["avg_value"] < 3_000_000_000:
+            continue
+
+        if row["score"] < 75:
+            continue
+
+        ticker = row["ticker"]
+
+        data = safe_download(ticker)
+        if data is None:
+            continue
+
+        data = compute_indicators(data)
         last = data.iloc[-1]
 
         entry = last["Close"]
@@ -162,52 +208,86 @@ def scan():
             continue
 
         signals.append({
-            "date":today,
-            "ticker":ticker,
-            "price":round(entry,2),
-            "score":score,
-            "target":target,
-            "stop":stop,
-            "rr":round(rr,2)
+            "date": today,
+            "ticker": ticker,
+            "sector": row["sector"],
+            "price": round(entry,2),
+            "score": row["score"],
+            "target": target,
+            "stop": stop,
+            "rr": round(rr,2)
         })
 
     if signals:
         df = pd.DataFrame(signals)
         df.to_csv(SIGNAL_FILE, index=False)
 
-        msg = "🔥 SWING LEADER\n\n"
-        for _, row in df.iterrows():
-            msg += f"{row['ticker']} | {row['price']} | Score {row['score']}\n"
+        msg = "🔥 SWING LEADER PRO\n\n"
+        for _, r in df.iterrows():
+            msg += f"{r['ticker']} | {r['price']} | Score {r['score']}\n"
 
         send_telegram(msg)
 
     return jsonify({
         "tickers_total": len(tickers),
-        "scanned_valid": scanned,
+        "top_sectors": top_sectors,
         "signals": len(signals)
     })
 
-@app.route("/test_data")
-def test_data():
+# ======================================
+# BACKTEST 6 MONTHS
+# ======================================
+@app.route("/backtest")
+def backtest():
 
-    data = safe_download("VCB.VN")
+    tickers, _ = load_watchlist()
 
-    if data is None:
-        return jsonify({"rows":0})
+    wins = 0
+    total = 0
 
-    return jsonify({"rows":len(data)})
+    for ticker in tickers:
 
+        data = safe_download(ticker)
+        if data is None or len(data) < 120:
+            continue
+
+        data = compute_indicators(data)
+
+        for i in range(60, len(data)-10):
+
+            sub = data.iloc[:i]
+            score, _, _, _ = score_stock(sub)
+
+            if score >= 75:
+                entry = data.iloc[i]["Close"]
+                future = data.iloc[i:i+10]
+
+                if future["High"].max() >= entry * 1.12:
+                    wins += 1
+                total += 1
+
+    winrate = round((wins/total)*100,2) if total > 0 else 0
+
+    return jsonify({
+        "total_trades": total,
+        "wins": wins,
+        "winrate_percent": winrate
+    })
+
+# ======================================
+# BASIC ROUTES
+# ======================================
 @app.route("/health")
 def health():
     return "OK"
 
 @app.route("/")
 def home():
-    return "Swing Leader Bot Running"
+    return "Swing Leader PRO Running"
 
-# =================================
+# ======================================
 # START
-# =================================
+# ======================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)

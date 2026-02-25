@@ -5,50 +5,39 @@ from flask import Flask, jsonify
 from datetime import datetime
 import os
 import requests
+import time
 
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-SIGNAL_FILE = "signals.csv"
-
-# ======================================
+# ==============================
 # LOAD WATCHLIST
-# ======================================
+# ==============================
 def load_watchlist():
-    try:
-        df = pd.read_csv("tickers.csv")
-        return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
-    except:
-        return [], {}
+    df = pd.read_csv("tickers.csv")
+    return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
 
-# ======================================
+# ==============================
 # TELEGRAM
-# ======================================
+# ==============================
 def send_telegram(msg):
     if not BOT_TOKEN or not CHAT_ID:
         return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": msg}
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": msg}
         requests.post(url, json=payload, timeout=10)
     except:
         pass
 
-# ======================================
+# ==============================
 # SAFE DOWNLOAD
-# ======================================
+# ==============================
 def safe_download(ticker):
     try:
-        data = yf.download(
-            ticker,
-            period="1y",
-            auto_adjust=True,
-            progress=False,
-            threads=False
-        )
-
+        data = yf.download(ticker, period="6mo", progress=False)
         if data is None or len(data) == 0:
             return None
 
@@ -56,13 +45,12 @@ def safe_download(ticker):
             data.columns = data.columns.get_level_values(0)
 
         return data
-
     except:
         return None
 
-# ======================================
+# ==============================
 # INDICATORS
-# ======================================
+# ==============================
 def compute_indicators(df):
 
     df["MA20"] = df["Close"].rolling(20).mean()
@@ -70,6 +58,7 @@ def compute_indicators(df):
     df["High20"] = df["High"].rolling(20).max()
     df["VolMA20"] = df["Volume"].rolling(20).mean()
 
+    # RSI
     delta = df["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -78,165 +67,79 @@ def compute_indicators(df):
     rs = avg_gain / avg_loss
     df["RSI"] = 100 - (100 / (1 + rs))
 
-    mf = ((df["Close"] - df["Low"]) - (df["High"] - df["Close"])) / (df["High"] - df["Low"])
+    # CMF
+    mf = ((df["Close"] - df["Low"]) - (df["High"] - df["Close"])) / (
+        df["High"] - df["Low"]
+    )
     mf = mf.replace([np.inf, -np.inf], 0).fillna(0)
     df["CMF"] = (mf * df["Volume"]).rolling(20).sum() / df["Volume"].rolling(20).sum()
 
     return df
 
-# ======================================
-# SCORE ENGINE
-# ======================================
-def score_stock(df):
-
-    last = df.iloc[-1]
-
-    score = 0
-    breakout = False
-    pullback = False
-
-    if last["MA20"] > last["MA50"]:
-        score += 20
-
-    if last["Close"] >= last["High20"]:
-        score += 25
-        breakout = True
-
-    if last["Close"] > last["MA20"] and last["Close"] < last["High20"]:
-        score += 10
-        pullback = True
-
-    vol_ratio = last["Volume"] / last["VolMA20"] if last["VolMA20"] > 0 else 0
-    if vol_ratio > 1.5:
-        score += 15
-
-    if last["CMF"] > 0:
-        score += 15
-
-    if 50 < last["RSI"] < 70:
-        score += 10
-
-    return score, breakout, pullback, vol_ratio
-
-# ======================================
-# SCAN ROUTE (LEVEL PRO)
-# ======================================
+# ==============================
+# SCAN ROUTE
+# ==============================
 @app.route("/scan")
 def scan():
 
+    start_time = time.time()
+
     tickers, sector_map = load_watchlist()
 
-    if not tickers:
-        return jsonify({"error":"tickers.csv missing"})
-
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    ranking = []
     signals = []
+    scanned_valid = 0
 
-    # ======================
-    # STEP 1: Ranking all
-    # ======================
     for ticker in tickers:
 
         data = safe_download(ticker)
         if data is None or len(data) < 60:
             continue
 
-        data = compute_indicators(data)
-        score, breakout, pullback, vol_ratio = score_stock(data)
-        last = data.iloc[-1]
-
-        sector = sector_map.get(ticker, "UNKNOWN")
-
-        avg_value = last["Close"] * last["VolMA20"]
-
-        ranking.append({
-            "ticker": ticker,
-            "sector": sector,
-            "score": score,
-            "avg_value": avg_value
-        })
-
-    if not ranking:
-        return jsonify({"message":"No data from Yahoo"})
-
-    df_rank = pd.DataFrame(ranking)
-
-    # ======================
-    # STEP 2: Sector strength
-    # ======================
-    sector_strength = (
-        df_rank.groupby("sector")["score"]
-        .mean()
-        .reset_index()
-        .sort_values("score", ascending=False)
-    )
-
-    top_sectors = sector_strength.head(3)["sector"].tolist()
-
-    # ======================
-    # STEP 3: Generate signals
-    # ======================
-    for row in ranking:
-
-        if row["sector"] not in top_sectors:
-            continue
-
-        if row["avg_value"] < 3_000_000_000:
-            continue
-
-        if row["score"] < 75:
-            continue
-
-        ticker = row["ticker"]
-
-        data = safe_download(ticker)
-        if data is None:
-            continue
+        scanned_valid += 1
 
         data = compute_indicators(data)
-        last = data.iloc[-1]
+        row = data.iloc[-1]
 
-        entry = last["Close"]
-        target = round(entry * 1.12,2)
-        stop = round(entry * 0.95,2)
+        # Trend
+        if row["MA20"] <= row["MA50"]:
+            continue
 
-        rr = (target - entry) / (entry - stop)
+        # Breakout
+        if row["Close"] < row["High20"]:
+            continue
 
-        if rr < 2:
+        # Volume
+        if row["Volume"] <= row["VolMA20"] * 1.5:
+            continue
+
+        # Liquidity filter 3 tỷ
+        avg_value = row["Close"] * row["VolMA20"]
+        if avg_value < 3_000_000_000:
             continue
 
         signals.append({
-            "date": today,
             "ticker": ticker,
-            "sector": row["sector"],
-            "price": round(entry,2),
-            "score": row["score"],
-            "target": target,
-            "stop": stop,
-            "rr": round(rr,2)
+            "sector": sector_map.get(ticker, "UNKNOWN"),
+            "price": round(row["Close"],2)
         })
 
+    # Telegram top signals
     if signals:
-        df = pd.DataFrame(signals)
-        df.to_csv(SIGNAL_FILE, index=False)
-
-        msg = "🔥 SWING LEADER PRO\n\n"
-        for _, r in df.iterrows():
-            msg += f"{r['ticker']} | {r['price']} | Score {r['score']}\n"
-
-        send_telegram(msg)
+        text = "🔥 BREAKOUT LEADER\n\n"
+        for s in signals[:5]:
+            text += f"{s['ticker']} | {s['price']}\n"
+        send_telegram(text)
 
     return jsonify({
         "tickers_total": len(tickers),
-        "top_sectors": top_sectors,
-        "signals": len(signals)
+        "scanned_valid": scanned_valid,
+        "signals": len(signals),
+        "time_seconds": round(time.time() - start_time,2)
     })
 
-# ======================================
-# BACKTEST 6 MONTHS
-# ======================================
+# ==============================
+# BACKTEST BREAKOUT LEADER
+# ==============================
 @app.route("/backtest")
 def backtest():
 
@@ -245,6 +148,7 @@ def backtest():
     wins = 0
     losses = 0
     total = 0
+    total_rr = 0
 
     for ticker in tickers:
 
@@ -254,78 +158,76 @@ def backtest():
 
         data = compute_indicators(data)
 
-        for i in range(60, len(data)-10):
+        for i in range(60, len(data)-30):
 
             row = data.iloc[i]
 
-            # 1. Trend filter
             if row["MA20"] <= row["MA50"]:
                 continue
 
-            # 2. Breakout confirm
             if row["Close"] < row["High20"]:
                 continue
 
-            # 3. Volume confirm
             if row["Volume"] <= row["VolMA20"] * 1.5:
                 continue
 
-            # 4. RSI filter
-            if not (55 <= row["RSI"] <= 70):
-                continue
-
-            # 5. Money flow
-            if row["CMF"] <= 0:
-                continue
-
             entry = row["Close"]
-            target = entry * 1.10
-            stop = entry * 0.95
+            stop = entry * 0.94  # 6% stop
 
-            future = data.iloc[i+1:i+11]
+            future = data.iloc[i+1:i+30]
 
-            hit_target = False
-            hit_stop = False
+            exit_price = None
 
             for _, f in future.iterrows():
+
+                # stop loss
                 if f["Low"] <= stop:
-                    hit_stop = True
-                    break
-                if f["High"] >= target:
-                    hit_target = True
+                    exit_price = stop
                     break
 
-            if hit_target:
-                wins += 1
-            elif hit_stop:
-                losses += 1
+                # trailing MA20
+                if f["Close"] < f["MA20"]:
+                    exit_price = f["Close"]
+                    break
 
+            if exit_price is None:
+                exit_price = future.iloc[-1]["Close"]
+
+            rr = (exit_price - entry) / (entry - stop)
+
+            total_rr += rr
             total += 1
 
+            if rr > 0:
+                wins += 1
+            else:
+                losses += 1
+
     winrate = round((wins/total)*100,2) if total > 0 else 0
+    avg_rr = round(total_rr/total,2) if total > 0 else 0
 
     return jsonify({
         "total_trades": total,
         "wins": wins,
         "losses": losses,
-        "winrate_percent": winrate
+        "winrate_percent": winrate,
+        "average_rr": avg_rr
     })
 
-# ======================================
-# BASIC ROUTES
-# ======================================
+# ==============================
+# HEALTH CHECK
+# ==============================
 @app.route("/health")
 def health():
     return "OK"
 
 @app.route("/")
 def home():
-    return "Swing Leader PRO Running"
+    return "VN Breakout Leader Pro running."
 
-# ======================================
+# ==============================
 # START
-# ======================================
+# ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-

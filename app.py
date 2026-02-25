@@ -143,8 +143,8 @@ def scan():
     ranking_rows = []
     signal_rows = []
 
-    for ticker in tickers:
-
+    MAX_STOCKS = 30  # giới hạn test trước
+    for ticker in tickers[:MAX_STOCKS]:
         try:
             data = yf.download(ticker, period="6mo", progress=False)
             if len(data) < 60:
@@ -252,6 +252,7 @@ def ping():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 

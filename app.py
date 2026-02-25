@@ -223,10 +223,14 @@ def scan():
         }, inplace=True)
 
         save_append(SECTOR_FILE, sector_summary)
-
+ 
+    max_score = max([r["score"] for r in ranking_rows]) if ranking_rows else 0
+    avg_score = sum([r["score"] for r in ranking_rows]) / len(ranking_rows) if ranking_rows else 0
     return jsonify({
         "scanned": len(tickers),
-        "signals": len(signal_rows)
+        "signals": len(signal_rows),
+        "max_score": max_score,
+        "avg_score": round(avg_score,2)
     })
 
 # ==============================
@@ -249,9 +253,11 @@ def ping():
 # ==============================
 # START
 # ==============================
+print("Total tickers:", len(tickers))
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 

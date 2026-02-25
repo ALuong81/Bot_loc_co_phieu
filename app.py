@@ -18,10 +18,29 @@ SECTOR_FILE = "sector.csv"
 # ==============================
 # LOAD TICKERS + SECTOR MAP
 # ==============================
+# def load_watchlist():
+#    df = pd.read_csv("tickers.csv")
+#    return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
 def load_watchlist():
-    df = pd.read_csv("tickers.csv")
-    return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
+    if not os.path.exists("tickers.csv"):
+        print("❌ tickers.csv không tồn tại")
+        return [], {}
 
+    try:
+        df = pd.read_csv("tickers.csv")
+
+        if "ticker" not in df.columns:
+            print("❌ tickers.csv thiếu cột ticker")
+            return [], {}
+
+        if "sector" not in df.columns:
+            df["sector"] = "UNKNOWN"
+
+        return df["ticker"].dropna().tolist(), dict(zip(df["ticker"], df["sector"]))
+
+    except Exception as e:
+        print("❌ Lỗi đọc tickers:", e)
+        return [], {}
 # ==============================
 # TELEGRAM
 # ==============================
@@ -230,6 +249,7 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 

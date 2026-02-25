@@ -4,5 +4,3 @@ numpy
 gunicorn
 yfinance
 requests
-sqlite3
-logging

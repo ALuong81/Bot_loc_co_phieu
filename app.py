@@ -21,6 +21,7 @@ SECTOR_FILE = "sector.csv"
 # def load_watchlist():
 #    df = pd.read_csv("tickers.csv")
 #    return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
+print("APP STARTING...")
 def load_watchlist():
     if not os.path.exists("tickers.csv"):
         print("❌ tickers.csv không tồn tại")
@@ -250,6 +251,10 @@ def home():
 @app.route("/ping")
 def ping():
     return "Server OK"
+    
+@app.route("/health")
+def health():
+    return "OK"
 # ==============================
 # START
 # ==============================
@@ -257,6 +262,7 @@ def ping():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 

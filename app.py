@@ -16,9 +16,14 @@ CHAT_ID = os.getenv("CHAT_ID")
 # LOAD WATCHLIST
 # ==============================
 def load_watchlist():
-    df = pd.read_csv("tickers.csv")
-    return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
+    if not os.path.exists("tickers.csv"):
+        return [], {}
 
+    try:
+        df = pd.read_csv("tickers.csv")
+        return df["ticker"].tolist(), dict(zip(df["ticker"], df["sector"]))
+    except:
+        return [], {}
 # ==============================
 # TELEGRAM
 # ==============================
@@ -82,8 +87,9 @@ def compute_indicators(df):
 # ==============================
 @app.route("/scan")
 def scan():
-
-    start_time = time.time()
+    try:
+        # toàn bộ code scan
+      start_time = time.time()
 
     tickers, sector_map = load_watchlist()
 
@@ -137,6 +143,8 @@ def scan():
         "signals": len(signals),
         "time_seconds": round(time.time() - start_time,2)
     })
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 # ==============================
 # BACKTEST BREAKOUT LEADER
@@ -225,12 +233,16 @@ def health():
 @app.route("/")
 def home():
     return "VN Breakout Leader Pro running."
-
+    
+@app.route("/ping")
+def ping():
+    return "Server OK"
 # ==============================
 # START
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 
 

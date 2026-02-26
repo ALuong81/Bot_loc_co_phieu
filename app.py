@@ -55,7 +55,8 @@ def compute_indicators(df):
 
     df["MA20"] = df["Close"].rolling(20).mean()
     df["MA50"] = df["Close"].rolling(50).mean()
-    df["High20"] = df["High"].rolling(20).max()
+#   df["High20"] = df["High"].rolling(20).max()
+    df["High20"] = df["High"].rolling(20).max().shift(1)
     df["VolMA20"] = df["Volume"].rolling(20).mean()
 
     # RSI
@@ -231,4 +232,5 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
 

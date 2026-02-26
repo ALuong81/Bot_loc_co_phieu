@@ -109,12 +109,12 @@ def scan():
             continue
 
         # Volume
-        if row["Volume"] <= row["VolMA20"] * 1.5:
+        if row["Volume"] <= row["VolMA20"] * 1.3:
             continue
 
-        # Liquidity filter 3 tỷ
+        # Liquidity filter 2 tỷ
         avg_value = row["Close"] * row["VolMA20"]
-        if avg_value < 3_000_000_000:
+        if avg_value < 2000000000:
             continue
 
         signals.append({
@@ -168,7 +168,7 @@ def backtest():
             if row["Close"] < row["High20"]:
                 continue
 
-            if row["Volume"] <= row["VolMA20"] * 1.5:
+            if row["Volume"] <= row["VolMA20"] * 1.3:
                 continue
 
             entry = row["Close"]
@@ -231,3 +231,4 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+

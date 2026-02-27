@@ -253,10 +253,19 @@ def backtest():
 def health():
     return "OK"
 
+@app.route("/debug_signals")
+def debug_signals():
+    import sqlite3
+    conn = sqlite3.connect("database.db")
+    df = pd.read_sql("SELECT * FROM signals", conn)
+    conn.close()
+    return jsonify({"rows": len(df)})
 @app.route("/")
+
 def home():
     return "Stock Bot SQLite Running"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+

@@ -4,3 +4,5 @@ numpy
 gunicorn
 yfinance
 requests
+scikit-learn
+joblib
